@@ -1,3 +1,4 @@
+import happybase
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import col
 from pyspark.ml.feature import VectorAssembler
@@ -28,7 +29,7 @@ def main():
     """)
     print("Initial row count:", df.count())
 
-    # 3. Basic cleaning: drop rows with nulls in label or features
+    # 3. More basic cleaning: drop rows with nulls in label or features
     cols_needed = ["Survived", "Pclass", "Sex", "Age", "SibSp", "Parch", "Fare"]
     df_clean = df.dropna(subset=cols_needed)
     print("Row count after dropping nulls:", df_clean.count())
@@ -95,14 +96,30 @@ def main():
     print("Accuracy:", accuracy)
     print("Area Under ROC (AUC):", auc)
 
-    # 8. (Later) These metrics will be written to HBase
-    # For now we just print them so they can be captured in screenshots
-    # Example values to use later when writing to HBase:
-    # row_key = "titanic_model_1"
-    # cf:accuracy = str(accuracy)
-    # cf:auc = str(auc)
+    # 8. Write metrics to HBase using happybase
+    try:
+        connection = happybase.Connection('master')   # Thrift server host
+        connection.open()
+        table = connection.table('titanic_metrics')
+
+        row_key = b"titanic_model_1"
+        data = {
+            b"cf:accuracy": str(accuracy).encode("utf-8"),
+            b"cf:auc":      str(auc).encode("utf-8")
+        }
+
+        table.put(row_key, data)
+        print("Successfully wrote metrics to HBase table 'titanic_metrics' for row 'titanic_model_1'.")
+    except Exception as e:
+        print("Error writing metrics to HBase:", e)
+    finally:
+        try:
+            connection.close()
+        except Exception:
+            pass
 
     spark.stop()
+
 
 
 if __name__ == "__main__":
